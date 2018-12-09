@@ -1,0 +1,14 @@
+name: dash-map-ts
+channels:
+- defaults
+- conda-forge
+- mullenkamp
+dependencies:
+- python=3.6
+- pdsql
+- plotly
+- dash
+- pyproj
+- pip
+- pip:
+    - dash-table
