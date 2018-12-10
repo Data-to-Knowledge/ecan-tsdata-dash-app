@@ -183,7 +183,9 @@ app.layout = html.Div(children=[
             start_date=start_date,
             id='date_sel'
 #               start_date_placeholder_text='DD/MM/YYYY'
-            )
+            ),
+        html.Label('Site IDs'),
+		dcc.Dropdown(options=[{'label': d, 'value': d} for d in np.sort(init_summ.ExtSiteID.unique())], multi=True, id='sites')
 		], className='two columns', style={'margin': 20}),
 
 	html.Div([
@@ -202,8 +204,7 @@ app.layout = html.Div(children=[
             columns=[{"name": i, "id": i, 'deletable': True} for i in table_cols],
             data=init_summ[table_cols].astype(str).to_dict('rows'),
             sorting=True,
-            sorting_type="multi",
-            filtering=True
+            sorting_type="multi"
 #            column_widths=[20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
             )
 
@@ -297,32 +298,42 @@ def dataset_options(summ_data):
 
 
 @app.callback(
-	Output('selected-data', 'figure'),
-	[Input('site-map', 'selectedData'), Input('site-map', 'clickData'),
-	Input('sel_dataset', 'value')],
-	[State('date_sel', 'start_date'), State('date_sel', 'end_date')])
-def display_data(selectedData, clickData, sel_dataset, start_date, end_date):
+        Output('sites', 'options'),
+        [Input('summ_data', 'children')])
+def update_sites_options(summ_data):
+    new_summ = pd.read_json(summ_data, orient='split')
+    sites = np.sort(new_summ.ExtSiteID.unqie())
+    options1 = [{'label': i, 'value': i} for i in sites]
+    return options1
 
-    print(sel_dataset)
 
-    sites1 = ['66213']
-#    sites1 = None
-
+@app.callback(
+        Output('sites', 'value'),
+        [Input('site-map', 'selectedData'), Input('site-map', 'clickData')])
+def update_sites_values(selectedData, clickData):
     if selectedData is not None:
         sites1 = [s['text'].split('<br>')[0] for s in selectedData['points']]
         print(sites1)
     elif clickData is not None:
         sites1 = [clickData['points'][0]['text'].split('<br>')[0]]
         print(sites1)
-#    if sites1 is None:
-#        return dict(
-#			data = [dict(x=0, y=0)],
-#			layout = dict(title='Click-drag on the map to select sites', paper_bgcolor = '#F4F4F8', plot_bgcolor = '#F4F4F8', showlegend=True, height=ts_plot_height))
+    else:
+        sites1 = ['66213']
+    return sites1
 
-    ts1 = mssql.rd_sql(server, db, ts_table, ['ExtSiteID', 'DatasetTypeID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [sel_dataset], 'ExtSiteID': sites1}, from_date=start_date, to_date=end_date, date_col='DateTime')
+
+@app.callback(
+	Output('selected-data', 'figure'),
+	[Input('sites', 'value'), Input('sel_dataset', 'value'), Input('site-map', 'selectedData'), Input('site-map', 'clickData')],
+	[State('date_sel', 'start_date'), State('date_sel', 'end_date')])
+def display_data(sites, sel_dataset, selected, clicked, start_date, end_date):
+
+    print(sel_dataset)
+
+    ts1 = mssql.rd_sql(server, db, ts_table, ['ExtSiteID', 'DatasetTypeID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [sel_dataset], 'ExtSiteID': sites}, from_date=start_date, to_date=end_date, date_col='DateTime')
 
     data = []
-    for s in sites1:
+    for s in sites:
         dataset1 = ts1[ts1.ExtSiteID == s]
         set1 = go.Scattergl(
                 x=dataset1.DateTime,
