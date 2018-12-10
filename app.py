@@ -218,7 +218,8 @@ app.layout = html.Div(children=[
 				data = [dict(x=0, y=0)],
 				layout = dict(
 					paper_bgcolor = '#F4F4F8',
-					plot_bgcolor = '#F4F4F8', height=600
+					plot_bgcolor = '#F4F4F8', 
+                    height=600
 				)
 			),
 			# animate = True
@@ -316,7 +317,9 @@ def display_data(selectedData, clickData, sel_dataset, start_date, end_date):
 			layout = dict(
 				title='Click-drag on the map to select sites',
 				paper_bgcolor = '#F4F4F8',
-				plot_bgcolor = '#F4F4F8'
+				plot_bgcolor = '#F4F4F8', 
+                showlegend=True, 
+                height=600
 			)
 		)
 
@@ -391,5 +394,5 @@ def download_summ(summ_data):
 
 
 if __name__ == '__main__':
-	app.run_server(debug=True, host='0.0.0.0')
+	app.run_server(debug=True, host='0.0.0.0', port=8050)
 
