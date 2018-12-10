@@ -41,18 +41,6 @@ def sel_ts_summ(ts_summ, features, mtypes, ctypes, data_codes, data_providers, s
     return df
 
 
-def generate_table(dataframe, max_rows=10):
-    return html.Table(
-        # Header
-        [html.Tr([html.Th(col) for col in dataframe.columns])] +
-
-        # Body
-        [html.Tr([
-            html.Td(dataframe.iloc[i][col]) for col in dataframe.columns
-        ]) for i in range(min(len(dataframe), max_rows))]
-    )
-
-
 ##########################################
 ### Parameters
 
@@ -81,10 +69,6 @@ ts_summ = pd.merge(datasets, ts_summ1, on='DatasetTypeID')
 
 ts_plot_height = 600
 map_height = 700
-
-#ts_summ.replace({'DatasetTypeID': datasettype_names}, inplace=True)
-#
-#ts_summ.rename(columns={'DatasetTypeID': 'Dataset Name'}, inplace=True)
 
 sites = sites[sites.ExtSiteID.isin(ts_summ.ExtSiteID.unique())].copy()
 
@@ -145,14 +129,6 @@ init_summ = sel_ts_summ(ts_summ, 'River', 'Flow', 'Recorder', 'Primary', 'ECan',
 #data_providers = 'ECan'
 #start_date = '2017-12-06'
 #end_date = '2018-12-06'
-
-
-#init_summ = sel_ts_summ(ts_summ, init_years)
-#init_sites = sites[sites.ExtSiteID.isin(init_summ.ExtSiteID.unique())].copy()
-
-#col1 = ["#2a4858", "#265465", "#1e6172", "#106e7c", "#007b84",
-#	"#00898a", "#00968e", "#19a390", "#31b08f", "#4abd8c", "#64c988",
-#	"#80d482", "#9cdf7c", "#bae976", "#d9f271", "#fafa6e"]
 
 mapbox_access_token = "pk.eyJ1IjoibXVsbGVua2FtcDEiLCJhIjoiY2pudXE0bXlmMDc3cTNxbnZ0em4xN2M1ZCJ9.sIOtya_qe9RwkYXj5Du1yg"
 
@@ -297,13 +273,6 @@ def update_dataset_options(summ_data):
     return options1
 
 
-#@app.callback(
-#    Output('sel_dataset', 'value'),
-#    [Input('sel_dataset', 'options')])
-#def update_dataset_values(options):
-#    return options[0]
-
-
 @app.callback(
         Output('sites', 'options'),
         [Input('summ_data', 'children')])
@@ -325,8 +294,8 @@ def update_sites_values(selectedData, clickData):
         sites1 = [clickData['points'][0]['text'].split('<br>')[0]]
         print(sites1)
     else:
-        sites1 = ['66213']
-    return sites1
+        sites1 = []
+    return sites1[:20]
 
 
 @app.callback(
@@ -335,6 +304,15 @@ def update_sites_values(selectedData, clickData):
 	[State('date_sel', 'start_date'), State('date_sel', 'end_date')])
 def display_data(sites, sel_dataset, selected, clicked, start_date, end_date):
 
+    if not sites:
+        return dict(
+			data = [dict(x=0, y=0)],
+			layout = dict(
+				title='Click-drag on the map to select sites',
+				paper_bgcolor = '#F4F4F8',
+				plot_bgcolor = '#F4F4F8'
+			)
+		)
     print(sel_dataset)
     sites1 = [str(s) for s in sites]
 
@@ -359,31 +337,26 @@ def display_data(sites, sel_dataset, selected, clicked, start_date, end_date):
 
 @app.callback(
     Output('summ_table', 'data'),
-    [Input('summ_data', 'children')])
-def plot_table(summ_data):
+    [Input('summ_data', 'children'), Input('sites', 'value'), Input('site-map', 'selectedData'), Input('site-map', 'clickData')])
+def plot_table(summ_data, sites, selectedData, clickData):
     new_summ = pd.read_json(summ_data, orient='split')[table_cols]
-    return new_summ.astype(str).to_dict("rows")
+    if sites:
+        new_summ = new_summ.loc[new_summ.ExtSiteID.isin(sites)]
+    return new_summ.to_dict("rows")
 
 
 @app.callback(
     Output('download-tsdata', 'href'),
-    [Input('site-map', 'selectedData'), Input('site-map', 'clickData'),
-	Input('sel_dataset', 'value')],
+    [Input('sites', 'value'), Input('site-map', 'selectedData'), Input('site-map', 'clickData'),	Input('sel_dataset', 'value')],
 	[State('date_sel', 'start_date'), State('date_sel', 'end_date')])
-def download_tsdata(selectedData, clickData, sel_dataset, start_date, end_date):
+def download_tsdata(sites, selectedData, clickData, sel_dataset, start_date, end_date):
 
-    if selectedData is not None:
-        sites1 = [s['text'].split('<br>')[0] for s in selectedData['points']]
-        print(sites1)
-    elif clickData is not None:
-        sites1 = [clickData['points'][0]['text'].split('<br>')[0]]
-        print(sites1)
-    else:
+    if not sites:
         return ''
 
+    sites1 = [str(s) for s in sites]
+
     ts1 = mssql.rd_sql(server, db, ts_table, ['ExtSiteID', 'DatasetTypeID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [sel_dataset], 'ExtSiteID': sites1}, from_date=start_date, to_date=end_date, date_col='DateTime')
-#    ts1.replace({'DatasetTypeID': datasettype_names}, inplace=True)
-#    ts1.rename(columns={'DatasetTypeID': 'DatasetType'}, inplace=True)
     csv_string = ts1.to_csv(index=False, encoding='utf-8')
     csv_string = "data:text/csv;charset=utf-8," + urllib.parse.quote(csv_string)
     return csv_string
