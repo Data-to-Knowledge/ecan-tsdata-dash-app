@@ -79,7 +79,8 @@ datasets['Dataset Name'] = datasets.Feature + ' - ' + datasets.MeasurementType +
 
 ts_summ = pd.merge(datasets, ts_summ1, on='DatasetTypeID')
 
-
+ts_plot_height = 600
+map_height = 700
 
 #ts_summ.replace({'DatasetTypeID': datasettype_names}, inplace=True)
 #
@@ -96,7 +97,7 @@ x, y = list(zip(*[transform(from_crs1, to_crs1, x, y) for x, y in xy1]))
 sites['lon'] = x
 sites['lat'] = y
 
-temp1 = 'River - Flow - Recorder - Primary - ECan (m**3/s)'
+init_dataset = 'River - Flow - Recorder - Primary - ECan (m**3/s)'
 
 table_cols = ['ExtSiteID', 'DatasetTypeID', 'Feature', 'MeasurementType', 'CollectionType', 'DataCode', 'DataProvider', 'Units', 'Min', 'Mean', 'Max', 'Count', 'FromDate', 'ToDate']
 
@@ -186,7 +187,7 @@ app.layout = html.Div(children=[
 		], className='two columns', style={'margin': 20}),
 
 	html.Div([
-		dcc.Graph(id = 'site-map', style={'height': 700}),
+		dcc.Graph(id = 'site-map', style={'height': map_height}),
 
         html.A(
             'Download Dataset Summary Data',
@@ -206,20 +207,20 @@ app.layout = html.Div(children=[
 #            column_widths=[20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
             )
 
-	], className='five columns', style={'margin': 20}),
+	], className='four columns', style={'margin': 20}),
 
     html.Div([
 
 		html.P('Select Dataset:', style={'display': 'inline-block'}),
-		dcc.Dropdown(options=[], value='River - Flow - Recorder - Primary - ECan (m**3/s)', id='sel_dataset'),
+		dcc.Dropdown(options=[{'value:': 5, 'label': init_dataset}], value=5, id='sel_dataset'),
 		dcc.Graph(
 			id = 'selected-data',
 			figure = dict(
 				data = [dict(x=0, y=0)],
 				layout = dict(
 					paper_bgcolor = '#F4F4F8',
-					plot_bgcolor = '#F4F4F8', 
-                    height=600
+					plot_bgcolor = '#F4F4F8',
+                    height=ts_plot_height
 				)
 			),
 			# animate = True
@@ -231,7 +232,7 @@ app.layout = html.Div(children=[
             href="",
             target="_blank",
             style={'margin': 50})
-	], className='five columns', style={'margin': 20, 'height': 900}),
+	], className='six columns', style={'margin': 10, 'height': 900}),
     html.Div(id='summ_data', style={'display': 'none'})
 ], style={'margin':0})
 
@@ -290,6 +291,7 @@ def dataset_options(summ_data):
     new_summ2 = new_summ[['DatasetTypeID', 'Dataset Name']].drop_duplicates().copy()
     new_summ2.columns = ['value', 'label']
     options1 = new_summ2.to_dict('records')
+    print(options1)
 
     return options1
 
@@ -303,7 +305,8 @@ def display_data(selectedData, clickData, sel_dataset, start_date, end_date):
 
     print(sel_dataset)
 
-    sites1 = None
+    sites1 = ['66213']
+#    sites1 = None
 
     if selectedData is not None:
         sites1 = [s['text'].split('<br>')[0] for s in selectedData['points']]
@@ -311,23 +314,12 @@ def display_data(selectedData, clickData, sel_dataset, start_date, end_date):
     elif clickData is not None:
         sites1 = [clickData['points'][0]['text'].split('<br>')[0]]
         print(sites1)
-    if sites1 is None:
-        return dict(
-			data = [dict(x=0, y=0)],
-			layout = dict(
-				title='Click-drag on the map to select sites',
-				paper_bgcolor = '#F4F4F8',
-				plot_bgcolor = '#F4F4F8', 
-                showlegend=True, 
-                height=600
-			)
-		)
+#    if sites1 is None:
+#        return dict(
+#			data = [dict(x=0, y=0)],
+#			layout = dict(title='Click-drag on the map to select sites', paper_bgcolor = '#F4F4F8', plot_bgcolor = '#F4F4F8', showlegend=True, height=ts_plot_height))
 
     ts1 = mssql.rd_sql(server, db, ts_table, ['ExtSiteID', 'DatasetTypeID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [sel_dataset], 'ExtSiteID': sites1}, from_date=start_date, to_date=end_date, date_col='DateTime')
-
-#    n_tiles = int(np.ceil(len(sites1)/len(col1)))
-#    col2 = np.tile(col1, n_tiles)[:len(sites1)].tolist()
-#    col3 = dict(zip(sites1, col2))
 
     data = []
     for s in sites1:
@@ -340,12 +332,7 @@ def display_data(selectedData, clickData, sel_dataset, start_date, end_date):
                 opacity=0.8)
         data.append(set1)
 
-    layout = dict(
-            title = 'Time series data',
-            paper_bgcolor = '#F4F4F8',
-			plot_bgcolor = '#F4F4F8',
-            xaxis = dict(
-                    range = [start_date, end_date]))
+    layout = dict(title = 'Time series data', paper_bgcolor = '#F4F4F8', plot_bgcolor = '#F4F4F8', xaxis = dict(range = [start_date, end_date]), showlegend=True, height=ts_plot_height)
 
     fig = dict(data=data, layout=layout, config={"displaylogo": False})
     return fig
@@ -365,7 +352,6 @@ def plot_table(summ_data):
 	Input('sel_dataset', 'value')],
 	[State('date_sel', 'start_date'), State('date_sel', 'end_date')])
 def download_tsdata(selectedData, clickData, sel_dataset, start_date, end_date):
-    sites1 = None
 
     if selectedData is not None:
         sites1 = [s['text'].split('<br>')[0] for s in selectedData['points']]
@@ -373,6 +359,8 @@ def download_tsdata(selectedData, clickData, sel_dataset, start_date, end_date):
     elif clickData is not None:
         sites1 = [clickData['points'][0]['text'].split('<br>')[0]]
         print(sites1)
+    else:
+        return ''
 
     ts1 = mssql.rd_sql(server, db, ts_table, ['ExtSiteID', 'DatasetTypeID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [sel_dataset], 'ExtSiteID': sites1}, from_date=start_date, to_date=end_date, date_col='DateTime')
 #    ts1.replace({'DatasetTypeID': datasettype_names}, inplace=True)
