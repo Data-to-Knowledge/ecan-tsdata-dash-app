@@ -286,7 +286,7 @@ def display_map(summ_data, relay):
 @app.callback(
     Output('sel_dataset', 'options'),
     [Input('summ_data', 'children')])
-def dataset_options(summ_data):
+def update_dataset_options(summ_data):
     new_summ = pd.read_json(summ_data, orient='split')
 
     new_summ2 = new_summ[['DatasetTypeID', 'Dataset Name']].drop_duplicates().copy()
@@ -297,12 +297,19 @@ def dataset_options(summ_data):
     return options1
 
 
+#@app.callback(
+#    Output('sel_dataset', 'value'),
+#    [Input('sel_dataset', 'options')])
+#def update_dataset_values(options):
+#    return options[0]
+
+
 @app.callback(
         Output('sites', 'options'),
         [Input('summ_data', 'children')])
 def update_sites_options(summ_data):
     new_summ = pd.read_json(summ_data, orient='split')
-    sites = np.sort(new_summ.ExtSiteID.unqie())
+    sites = np.sort(new_summ.ExtSiteID.unique())
     options1 = [{'label': i, 'value': i} for i in sites]
     return options1
 
@@ -329,11 +336,12 @@ def update_sites_values(selectedData, clickData):
 def display_data(sites, sel_dataset, selected, clicked, start_date, end_date):
 
     print(sel_dataset)
+    sites1 = [str(s) for s in sites]
 
-    ts1 = mssql.rd_sql(server, db, ts_table, ['ExtSiteID', 'DatasetTypeID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [sel_dataset], 'ExtSiteID': sites}, from_date=start_date, to_date=end_date, date_col='DateTime')
+    ts1 = mssql.rd_sql(server, db, ts_table, ['ExtSiteID', 'DatasetTypeID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [sel_dataset], 'ExtSiteID': sites1}, from_date=start_date, to_date=end_date, date_col='DateTime')
 
     data = []
-    for s in sites:
+    for s in sites1:
         dataset1 = ts1[ts1.ExtSiteID == s]
         set1 = go.Scattergl(
                 x=dataset1.DateTime,
