@@ -106,9 +106,9 @@ init_dataset = 'River - Flow - Recorder - Primary - ECan (m**3/s)'
 
 table_cols = ['ExtSiteID', 'ExtSiteName', 'NZTMX', 'NZTMY', 'DatasetTypeID', 'Feature', 'MeasurementType', 'CollectionType', 'DataCode', 'DataProvider', 'Units', 'Min', 'Mean', 'Max', 'Count', 'FromDate', 'ToDate']
 
-lat = -43.45
-lon = 171.9
-zoom = 7
+lat1 = -43.45
+lon1 = 171.9
+zoom1 = 7
 
 #years = np.arange(min_year2 + 2, max_year + 1)
 #years_label = {str(min_year2): 'All Years'}
@@ -126,7 +126,7 @@ mapbox_access_token = "pk.eyJ1IjoibXVsbGVua2FtcDEiLCJhIjoiY2pudXE0bXlmMDc3cTNxbn
 ###############################################
 ### App layout
 
-map_layout = dict(mapbox = dict(layers = [], accesstoken = mapbox_access_token, style = 'outdoors', center=dict(lat=lat, lon=lon), zoom=zoom), margin = dict(r=0, l=0, t=0, b=0), autosize=True, hovermode='closest', height=map_height)
+map_layout = dict(mapbox = dict(layers = [], accesstoken = mapbox_access_token, style = 'outdoors', center=dict(lat=lat1, lon=lon1), zoom=zoom1), margin = dict(r=0, l=0, t=0, b=0), autosize=True, hovermode='closest', height=map_height)
 
 def serve_layout():
 
@@ -137,6 +137,8 @@ def serve_layout():
     start_date = max_date - pd.DateOffset(years=1)
 
     init_summ = sel_ts_summ(ts_summ, 'River', 'Flow', 'Recorder', 'Primary', 'ECan', str(start_date.date()), str(max_date.date()))
+
+    new_sites = init_summ.drop_duplicates('ExtSiteID')
 
     layout = html.Div(children=[
     html.Div([
@@ -165,7 +167,24 @@ def serve_layout():
 
 	html.Div([
         html.P('Click on a site or "box select" multiple sites:', style={'display': 'inline-block'}),
-		dcc.Graph(id = 'site-map', style={'height': map_height}),
+		dcc.Graph(
+                id = 'site-map',
+                style={'height': map_height},
+                figure=dict(
+                        data = [dict(lat = new_sites['lat'],
+                                     lon = new_sites['lon'],
+                                     text = new_sites['hover'],
+                                     type = 'scattermapbox',
+                                     hoverinfo = 'text',
+                                     marker = dict(
+                                             size=8,
+                                             color='black',
+                                             opacity=1
+                                             )
+                                     )
+                                ],
+                        layout=map_layout),
+                config={"displaylogo": False}),
 
         html.A(
             'Download Dataset Summary Data',
@@ -198,14 +217,14 @@ def serve_layout():
 			id = 'selected-data',
 			figure = dict(
 				data = [dict(x=0, y=0)],
-				layout = dict(
-					paper_bgcolor = '#F4F4F8',
-					plot_bgcolor = '#F4F4F8',
-                    height=ts_plot_height
-				)
-			),
-			# animate = True
-		),
+                layout = dict(
+                        paper_bgcolor = '#F4F4F8',
+                        plot_bgcolor = '#F4F4F8',
+                        height = ts_plot_height
+                        )
+                ),
+			config={"displaylogo": False}
+            ),
         html.A(
             'Download Time Series Data',
             id='download-tsdata',
@@ -215,7 +234,8 @@ def serve_layout():
             style={'margin': 50})
 	], className='six columns', style={'margin': 10, 'height': 900}),
     html.Div(id='summ_data', style={'display': 'none'}),
-    html.Div(id='summ_data_all', style={'display': 'none'}, children=ts_summ.to_json(date_format='iso', orient='split'))
+    html.Div(id='summ_data_all', style={'display': 'none'}, children=ts_summ.to_json(date_format='iso', orient='split')),
+    dcc.Graph(id='map-layout', style={'display': 'none'}, figure=dict(data=[], layout=map_layout))
 ], style={'margin':0})
 
     return layout
@@ -241,10 +261,31 @@ def calc_summ(features, mtypes, ctypes, data_codes, data_providers, start_date, 
 
 
 @app.callback(
+		Output('map-layout', 'figure'),
+		[Input('site-map', 'relayoutData')],
+		[State('map-layout', 'figure')])
+def update_map_layout(relay, figure):
+    if relay is not None:
+#        print(figure['layout'])
+        if 'mapbox.center' in relay:
+#            print(relay)
+            lat = float(relay['mapbox.center']['lat'])
+            lon = float(relay['mapbox.center']['lon'])
+            zoom = float(relay['mapbox.zoom'])
+            new_layout = dict(mapbox = dict(layers = [], accesstoken = mapbox_access_token, style = 'outdoors', center=dict(lat=lat, lon=lon), zoom=zoom), margin = dict(r=0, l=0, t=0, b=0), autosize=True, hovermode='closest', height=map_height)
+        else:
+            new_layout = figure['layout'].copy()
+    else:
+        new_layout = figure['layout'].copy()
+
+    return dict(data=[], layout=new_layout)
+
+
+@app.callback(
 		Output('site-map', 'figure'),
 		[Input('summ_data', 'children')],
-		[State('site-map', 'relayoutData')])
-def display_map(summ_data, relay):
+		[State('map-layout', 'figure')])
+def display_map(summ_data, figure):
     new_summ = pd.read_json(summ_data, orient='split')
     new_sites = new_summ.drop_duplicates('ExtSiteID')
 #    print(new_sites)
@@ -259,17 +300,7 @@ def display_map(summ_data, relay):
 		marker = dict(size=8, color='black', opacity=1)
 	)]
 
-    if relay is not None:
-        if 'mapbox.center' in relay:
-            print(relay)
-            lat = float(relay['mapbox.center']['lat'])
-            lon = float(relay['mapbox.center']['lon'])
-            zoom = float(relay['mapbox.zoom'])
-            map_layout['mapbox']['center']['lon'] = lon
-            map_layout['mapbox']['center']['lat'] = lat
-            map_layout['mapbox']['zoom'] = zoom
-
-    fig = dict(data=data, layout=map_layout, config={"displaylogo": False})
+    fig = dict(data=data, layout=figure['layout'])
     return fig
 
 
@@ -345,7 +376,7 @@ def display_data(sites, sel_dataset, selected, clicked, start_date, end_date):
 
     layout = dict(title = 'Time series data', paper_bgcolor = '#F4F4F8', plot_bgcolor = '#F4F4F8', xaxis = dict(range = [start_date, end_date]), showlegend=True, height=ts_plot_height)
 
-    fig = dict(data=data, layout=layout, config={"displaylogo": False})
+    fig = dict(data=data, layout=layout)
     return fig
 
 
