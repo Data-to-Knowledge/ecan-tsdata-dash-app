@@ -345,8 +345,7 @@ def update_sites_values(selectedData, clickData):
 
 @app.callback(
 	Output('selected-data', 'figure'),
-	[Input('sites', 'value'), Input('sel_dataset', 'value'), Input('site-map', 'selectedData'), Input('site-map', 'clickData')],
-	[State('date_sel', 'start_date'), State('date_sel', 'end_date')])
+	[Input('sites', 'value'), Input('sel_dataset', 'value'), Input('site-map', 'selectedData'), Input('site-map', 'clickData'), Input('date_sel', 'start_date'), Input('date_sel', 'end_date')])
 def display_data(sites, sel_dataset, selected, clicked, start_date, end_date):
 
     if not sites:
