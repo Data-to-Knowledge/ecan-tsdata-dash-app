@@ -16,27 +16,62 @@ from pyproj import Proj, transform
 from_crs = Proj('+proj=tmerc +ellps=GRS80 +a=6378137.0 +f=298.257222101 +towgs84=0,0,0,0,0,0,0 +pm=0  +lon_0=173 +x_0=1600000 +y_0=10000000 +k_0=0.9996 +lat_0=0 +units=m +axis=enu +no_defs', preserve_units=True)
 to_crs = Proj('+proj=longlat +datum=WGS84 +ellps=WGS84 +a=6378137 +f=298.257223563 +pm=0  +no_defs', preserve_units=True)
 
+sites_table = 'ExternalSite'
+ts_summ_table = 'TSDataNumericDailySumm'
+ts_table = 'TSDataNumericDaily'
+dataset_table = 'vDatasetTypeNamesActive'
+mtype_table = 'MeasurementType'
+sites_cols = ['ExtSiteID', 'ExtSiteName', 'NZTMX', 'NZTMY']
+
+wq_mtypes_table = 'WQMeasurement'
+wq_summ_table = 'WQDataSumm'
+
 ##########################################
 ### Functions
 
 
-def rd_ts_summ(server, db, ts_summ_table, dataset_table, mtype_table, sites_table, sites_cols):
-    ## Load ts summary data
-    ts_summ1 = mssql.rd_sql(server, db, ts_summ_table)
-    ts_summ1['FromDate'] = pd.to_datetime(ts_summ1['FromDate'])
-    ts_summ1['ToDate'] = pd.to_datetime(ts_summ1['ToDate'])
+def ecan_ts_summ(server, database, features, mtypes, ctypes, data_codes, data_providers):
+    """
 
-    ## Load other data
-    datasets1 = mssql.rd_sql(server, db, dataset_table)
-    mtypes = mssql.rd_sql(server, db, mtype_table)
-    datasets = pd.merge(datasets1, mtypes, on='MeasurementType')
-    datasets['Dataset Name'] = datasets.Feature + ' - ' + datasets.MeasurementType + ' - ' + datasets.CollectionType + ' - ' + datasets.DataCode + ' - ' + datasets.DataProvider + ' (' + datasets.Units + ')'
+    """
+    ### Get the appropriate dataset/mtype keys
+    datasets1 = mssql.rd_sql(server, database, dataset_table, where_col={'Feature': features, 'MeasurementType': mtypes, 'CollectionType': ctypes, 'DataCode': data_codes, 'DataProvider': data_providers})
+    mtypes1 = mssql.rd_sql(server, database, mtype_table, ['MeasurementType', 'Units'], where_col={'MeasurementType': mtypes})
+    datasets2 = pd.merge(datasets1, mtypes1, on='MeasurementType')
 
-    ## Merge the two
-    ts_summ2 = pd.merge(datasets, ts_summ1, on='DatasetTypeID')
+    wq_mtypes = mssql.rd_sql(server, database, wq_mtypes_table, ['MeasurementID', 'Measurement'], where_col={'Measurement': mtypes})
+    wq_mtypes.rename(columns={'Measurement': 'MeasurementType'}, inplace=True)
+
+    ### Get the summary data
+    summ1 = mssql.rd_sql(server, database, ts_summ_table, ['ExtSiteID', 'DatasetTypeID', 'Min', 'Median', 'Mean', 'Max', 'Count', 'FromDate', 'ToDate'], where_col={'DatasetTypeID': datasets1.DatasetTypeID.tolist()})
+    summ2 = pd.merge(summ1, datasets2, on='DatasetTypeID').drop('DatasetTypeID', axis=1)
+
+    wq_summ1 = mssql.rd_sql(server, database, wq_summ_table, ['ExtSiteID', 'MeasurementID', 'Units', 'FromDate', 'ToDate'], where_col={'MeasurementID': wq_mtypes.MeasurementID.tolist(), 'DataType': ['WQData']})
+    wq_summ1['CollectionType'] = 'Manual Field'
+    wq_summ1['DataCode'] = 'Primary'
+    wq_summ1['DataProvider'] = 'ECan'
+    wq_summ1['Feature'] = 'Aquifer'
+    wq_summ1.loc[wq_summ1.ExtSiteID.str.contains('SQ', case=False), 'Feature'] = 'River'
+
+    wq_summ2 = pd.merge(wq_summ1, wq_mtypes, on='MeasurementID').drop('MeasurementID', axis=1)
+
+    ### Join
+    summ3 = pd.concat([summ2, wq_summ2], sort=True)
+    summ3['FromDate'] = pd.to_datetime(summ3['FromDate'])
+    summ3['ToDate'] = pd.to_datetime(summ3['ToDate'])
+
+    return summ3
+
+
+def app_ts_summ(server, database, features, mtypes, ctypes, data_codes, data_providers):
+    """
+
+    """
+    ## Get TS summary
+    ecan_summ = ecan_ts_summ(server, database, features, mtypes, ctypes, data_codes, data_providers)
 
     ## Get site info
-    sites = mssql.rd_sql(server, db, sites_table, sites_cols)
+    sites = mssql.rd_sql(server, database, sites_table, sites_cols)
     sites['NZTMX'] = sites['NZTMX'].astype(int)
     sites['NZTMY'] = sites['NZTMY'].astype(int)
 
@@ -53,7 +88,7 @@ def rd_ts_summ(server, db, ts_summ_table, dataset_table, mtype_table, sites_tabl
     sites['lat'] = y
 
     ## Combine with everything
-    ts_summ = pd.merge(sites, ts_summ2, on='ExtSiteID')
+    ts_summ = pd.merge(sites, ecan_summ, on='ExtSiteID')
 
     return ts_summ
 
@@ -78,6 +113,7 @@ def sel_ts_summ(ts_summ, features, mtypes, ctypes, data_codes, data_providers, s
     df['Min'] = df['Min'].round(3).astype(str)
     df['Mean'] = df['Mean'].round(3).astype(str)
     df['Max'] = df['Max'].round(3).astype(str)
+
     return df
 
 

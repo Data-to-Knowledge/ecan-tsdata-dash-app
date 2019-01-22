@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from pdsql import mssql
 import urllib
-from util import rd_ts_summ, sel_ts_summ
+from util import app_ts_summ, sel_ts_summ
 
 pd.options.display.max_columns = 10
 
@@ -28,7 +28,15 @@ ts_table = 'TSDataNumericDaily'
 dataset_table = 'vDatasetTypeNamesActive'
 mtype_table = 'MeasurementType'
 sites_cols = ['ExtSiteID', 'ExtSiteName', 'NZTMX', 'NZTMY']
-#datasettypes = [4, 5, 15]
+features = ['River', 'Aquifer', 'Atmosphere']
+mtypes = ['Abstraction', 'Water Level', 'Flow', 'Temperature', 'Precipitation', 'Nitrate Nitrogen']
+data_codes = ['RAW', 'Primary']
+ctypes = ['Recorder', 'Manual Field']
+data_providers = ['ECan', 'NIWA', 'Aqualinc', 'Boraman', 'ECS']
+
+#include_datasets = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,424,1520,1521,1636,
+#                1637,1638,1886,1887,1943,4502,4503,4514,4514,4520,4521,4557,4558,
+#                4559,4563,4564,4565,4569,4570,4571]
 #datasettype_names = {4: 'Water Level (m)', 5: 'Flow (m3/s)', 15: 'Precip (mm)'}
 
 ts_plot_height = 600
@@ -36,7 +44,7 @@ map_height = 700
 
 init_dataset = 'River - Flow - Recorder - Primary - ECan (m**3/s)'
 
-table_cols = ['ExtSiteID', 'ExtSiteName', 'NZTMX', 'NZTMY', 'DatasetTypeID', 'Feature', 'MeasurementType', 'CollectionType', 'DataCode', 'DataProvider', 'Units', 'Min', 'Mean', 'Max', 'Count', 'FromDate', 'ToDate']
+table_cols = ['ExtSiteID', 'ExtSiteName', 'NZTMX', 'NZTMY', 'Feature', 'MeasurementType', 'CollectionType', 'DataCode', 'DataProvider', 'Units', 'Min', 'Median', 'Mean', 'Max', 'Count', 'FromDate', 'ToDate']
 
 lat1 = -43.45
 lon1 = 171.9
@@ -62,7 +70,7 @@ map_layout = dict(mapbox = dict(layers = [], accesstoken = mapbox_access_token, 
 
 def serve_layout():
 
-    ts_summ = rd_ts_summ(server, db, ts_summ_table, dataset_table, mtype_table, sites_table, sites_cols)
+    ts_summ = app_ts_summ(server, db, features, mtypes, ctypes, data_codes, data_providers)
 
     ### prepare summaries and initial states
     max_date = pd.Timestamp.now()
