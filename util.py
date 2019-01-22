@@ -8,6 +8,7 @@ from pdsql import mssql
 import pandas as pd
 import numpy as np
 from pyproj import Proj, transform
+from hilltoppy import web_service as ws
 
 ##########################################
 ### Parameters
@@ -26,6 +27,9 @@ sites_cols = ['ExtSiteID', 'ExtSiteName', 'NZTMX', 'NZTMY']
 wq_mtypes_table = 'WQMeasurement'
 wq_summ_table = 'WQDataSumm'
 
+base_url = 'http://wateruse.ecan.govt.nz'
+hts = 'WQAll.hts'
+
 ##########################################
 ### Functions
 
@@ -43,7 +47,7 @@ def ecan_ts_summ(server, database, features, mtypes, ctypes, data_codes, data_pr
 
     ### Get the summary data
     summ1 = mssql.rd_sql(server, database, ts_summ_table, ['ExtSiteID', 'DatasetTypeID', 'Min', 'Median', 'Mean', 'Max', 'Count', 'FromDate', 'ToDate'], where_col={'DatasetTypeID': datasets1.DatasetTypeID.tolist()})
-    summ2 = pd.merge(summ1, datasets2, on='DatasetTypeID').drop('DatasetTypeID', axis=1)
+    summ2 = pd.merge(summ1, datasets2, on='DatasetTypeID')
 
     if not wq_mtypes.empty:
         wq_mtypes.rename(columns={'Measurement': 'MeasurementType'}, inplace=True)
@@ -56,7 +60,12 @@ def ecan_ts_summ(server, database, features, mtypes, ctypes, data_codes, data_pr
 
         wq_summ2 = pd.merge(wq_summ1, wq_mtypes, on='MeasurementID').drop('MeasurementID', axis=1)
 
-        summ3 = pd.concat([summ2, wq_summ2], sort=True)
+        wq_datasets1 = wq_summ2[['Feature', 'MeasurementType', 'CollectionType', 'DataCode', 'DataProvider']].drop_duplicates()
+        wq_datasets1['DatasetTypeID'] = np.arange(10000, 10000 + len(wq_datasets1))
+
+        wq_summ3 = pd.merge(wq_summ2, wq_datasets1, on=['Feature', 'MeasurementType', 'CollectionType', 'DataCode', 'DataProvider'])
+
+        summ3 = pd.concat([summ2, wq_summ3], sort=True)
     else:
         summ3 = summ2
 
@@ -73,6 +82,9 @@ def app_ts_summ(server, database, features, mtypes, ctypes, data_codes, data_pro
     """
     ## Get TS summary
     ecan_summ = ecan_ts_summ(server, database, features, mtypes, ctypes, data_codes, data_providers)
+
+    ## Dataset name
+    ecan_summ['Dataset Name'] = ecan_summ.Feature + ' - ' + ecan_summ.MeasurementType + ' - ' + ecan_summ.CollectionType + ' - ' + ecan_summ.DataCode + ' - ' + ecan_summ.DataProvider + ' (' + ecan_summ.Units + ')'
 
     ## Get site info
     sites = mssql.rd_sql(server, database, sites_table, sites_cols)
@@ -120,6 +132,26 @@ def sel_ts_summ(ts_summ, features, mtypes, ctypes, data_codes, data_providers, s
 
     return df
 
+
+def ecan_ts_data(server, database, site_ts_summ, from_date, to_date, dtl_method=None):
+    """
+
+    """
+    dataset1 = site_ts_summ.DatasetTypeID.iloc[0]
+    sites1 = site_ts_summ.ExtSiteID.unique().tolist()
+
+    if dataset1 < 10000:
+        ts1 = mssql.rd_sql(server, database, ts_table, ['ExtSiteID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [dataset1], 'ExtSiteID': sites1}, from_date=from_date, to_date=to_date, date_col='DateTime')
+    else:
+        ts_list = []
+        mtype = site_ts_summ.MeasurementType.iloc[0]
+        for s in sites1:
+            ts0 = ws.get_data(base_url, hts, s, mtype, from_date, to_date, dtl_method=dtl_method)
+            ts_list.append(ts0)
+        ts1 = pd.concat(ts_list).reset_index().drop('Measurement', axis=1)
+        ts1.rename(columns={'Site': 'ExtSiteID'}, inplace=True)
+
+    return ts1
 
 
 

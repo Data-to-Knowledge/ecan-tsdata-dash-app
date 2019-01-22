@@ -7,9 +7,8 @@ import dash_table
 import plotly.graph_objs as go
 import pandas as pd
 import numpy as np
-from pdsql import mssql
 import urllib
-from util import app_ts_summ, sel_ts_summ
+from util import app_ts_summ, sel_ts_summ, ecan_ts_data
 
 pd.options.display.max_columns = 10
 
@@ -29,7 +28,7 @@ dataset_table = 'vDatasetTypeNamesActive'
 mtype_table = 'MeasurementType'
 sites_cols = ['ExtSiteID', 'ExtSiteName', 'NZTMX', 'NZTMY']
 features = ['River', 'Aquifer', 'Atmosphere']
-mtypes = ['Abstraction', 'Water Level', 'Flow', 'Temperature', 'Precipitation']
+mtypes = ['Abstraction', 'Water Level', 'Flow', 'Temperature', 'Precipitation', 'Nitrate Nitrogen', 'Nitrate-N + Nitrite-N', 'Ammoniacal Nitrogen', 'Total Nitrogen', 'Dissolved Oxygen', 'Dissolved Oxygen % Saturation', 'Turbidity', 'Dissolved Reactive Phosphorus', 'Total Phosphorus', 'E. coli', 'Total Coliforms', 'Water Temperature (Field)', 'Conductivity (Field)', 'Conductivity', 'Total Suspended Solids', 'Chlorophyll a (planktonic)']
 data_codes = ['RAW', 'Primary']
 ctypes = ['Recorder', 'Manual Field']
 data_providers = ['ECan', 'NIWA', 'Aqualinc', 'Boraman', 'ECS']
@@ -102,8 +101,17 @@ def serve_layout():
 #               start_date_placeholder_text='DD/MM/YYYY'
             ),
         html.Label('Site IDs'),
-		dcc.Dropdown(options=[{'label': d, 'value': d} for d in np.sort(init_summ.ExtSiteID.unique())], multi=True, id='sites')
-		], className='two columns', style={'margin': 20}),
+		dcc.Dropdown(options=[{'label': d, 'value': d} for d in np.sort(init_summ.ExtSiteID.unique())], multi=True, id='sites'),
+        html.Label('Water quality below detection limit method'),
+        dcc.RadioItems(
+            options=[
+                {'label': 'Half dtl', 'value': 'half'},
+                {'label': 'Trend analysis method', 'value': 'trend'}
+            ],
+            value='half',
+            id='dtl')
+		],
+    className='two columns', style={'margin': 20}),
 
 	html.Div([
         html.P('Click on a site or "box select" multiple sites:', style={'display': 'inline-block'}),
@@ -285,29 +293,38 @@ def update_sites_values(selectedData, clickData):
 
 @app.callback(
 	Output('selected-data', 'figure'),
-	[Input('sites', 'value'), Input('sel_dataset', 'value'), Input('site-map', 'selectedData'), Input('site-map', 'clickData'), Input('date_sel', 'start_date'), Input('date_sel', 'end_date')])
-def display_data(sites, sel_dataset, selected, clicked, start_date, end_date):
+	[Input('sites', 'value'), Input('sel_dataset', 'value'), Input('site-map', 'selectedData'), Input('site-map', 'clickData'), Input('date_sel', 'start_date'), Input('date_sel', 'end_date'), Input('summ_data', 'children'), Input('dtl', 'value')])
+def display_data(sites, sel_dataset, selected, clicked, start_date, end_date, summ_data, dtl):
 
-    if not sites:
-        return dict(
+    base_dict = dict(
 			data = [dict(x=0, y=0)],
 			layout = dict(
 				title='Click-drag on the map to select sites',
 				paper_bgcolor = '#F4F4F8',
 				plot_bgcolor = '#F4F4F8'
-			)
-		)
+                )
+            )
+
+    if not sites:
+        return base_dict
+
     print(sel_dataset)
+
+    new_summ = pd.read_json(summ_data, orient='split')
     sites1 = [str(s) for s in sites]
 
-    ts1 = mssql.rd_sql(server, db, ts_table, ['ExtSiteID', 'DatasetTypeID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [sel_dataset], 'ExtSiteID': sites1}, from_date=start_date, to_date=end_date, date_col='DateTime')
+    site_ts_summ = new_summ[new_summ.ExtSiteID.isin(sites1)].copy()
+    if site_ts_summ.empty:
+        return base_dict
+
+    ts1 = ecan_ts_data(server, db, site_ts_summ, start_date, end_date, dtl)
+    grp1 = ts1.groupby('ExtSiteID')
 
     data = []
-    for s in sites1:
-        dataset1 = ts1[ts1.ExtSiteID == s]
+    for s, group in grp1:
         set1 = go.Scattergl(
-                x=dataset1.DateTime,
-                y=dataset1.Value,
+                x=group.DateTime,
+                y=group.Value,
                 name=s,
 #                line={'color': col3[s]},
                 opacity=0.8)
@@ -333,15 +350,18 @@ def plot_table(summ_data, sites, selectedData, clickData):
 @app.callback(
     Output('download-tsdata', 'href'),
     [Input('sites', 'value'), Input('site-map', 'selectedData'), Input('site-map', 'clickData'),	Input('sel_dataset', 'value')],
-	[State('date_sel', 'start_date'), State('date_sel', 'end_date')])
-def download_tsdata(sites, selectedData, clickData, sel_dataset, start_date, end_date):
+	[State('date_sel', 'start_date'), State('date_sel', 'end_date'), State('summ_data', 'children')])
+def download_tsdata(sites, selectedData, clickData, sel_dataset, start_date, end_date, summ_data):
 
     if not sites:
         return ''
 
+    new_summ = pd.read_json(summ_data, orient='split')
     sites1 = [str(s) for s in sites]
 
-    ts1 = mssql.rd_sql(server, db, ts_table, ['ExtSiteID', 'DatasetTypeID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [sel_dataset], 'ExtSiteID': sites1}, from_date=start_date, to_date=end_date, date_col='DateTime')
+    site_ts_summ = new_summ[new_summ.ExtSiteID.isin(sites1)].copy()
+
+    ts1 = ecan_ts_data(server, db, site_ts_summ, start_date, end_date, 'half')
     csv_string = ts1.to_csv(index=False, encoding='utf-8')
     csv_string = "data:text/csv;charset=utf-8," + urllib.parse.quote(csv_string)
     return csv_string
