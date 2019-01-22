@@ -40,23 +40,27 @@ def ecan_ts_summ(server, database, features, mtypes, ctypes, data_codes, data_pr
     datasets2 = pd.merge(datasets1, mtypes1, on='MeasurementType')
 
     wq_mtypes = mssql.rd_sql(server, database, wq_mtypes_table, ['MeasurementID', 'Measurement'], where_col={'Measurement': mtypes})
-    wq_mtypes.rename(columns={'Measurement': 'MeasurementType'}, inplace=True)
 
     ### Get the summary data
     summ1 = mssql.rd_sql(server, database, ts_summ_table, ['ExtSiteID', 'DatasetTypeID', 'Min', 'Median', 'Mean', 'Max', 'Count', 'FromDate', 'ToDate'], where_col={'DatasetTypeID': datasets1.DatasetTypeID.tolist()})
     summ2 = pd.merge(summ1, datasets2, on='DatasetTypeID').drop('DatasetTypeID', axis=1)
 
-    wq_summ1 = mssql.rd_sql(server, database, wq_summ_table, ['ExtSiteID', 'MeasurementID', 'Units', 'FromDate', 'ToDate'], where_col={'MeasurementID': wq_mtypes.MeasurementID.tolist(), 'DataType': ['WQData']})
-    wq_summ1['CollectionType'] = 'Manual Field'
-    wq_summ1['DataCode'] = 'Primary'
-    wq_summ1['DataProvider'] = 'ECan'
-    wq_summ1['Feature'] = 'Aquifer'
-    wq_summ1.loc[wq_summ1.ExtSiteID.str.contains('SQ', case=False), 'Feature'] = 'River'
+    if not wq_mtypes.empty:
+        wq_mtypes.rename(columns={'Measurement': 'MeasurementType'}, inplace=True)
+        wq_summ1 = mssql.rd_sql(server, database, wq_summ_table, ['ExtSiteID', 'MeasurementID', 'Units', 'FromDate', 'ToDate'], where_col={'MeasurementID': wq_mtypes.MeasurementID.tolist(), 'DataType': ['WQData']})
+        wq_summ1['CollectionType'] = 'Manual Field'
+        wq_summ1['DataCode'] = 'Primary'
+        wq_summ1['DataProvider'] = 'ECan'
+        wq_summ1['Feature'] = 'Aquifer'
+        wq_summ1.loc[wq_summ1.ExtSiteID.str.contains('SQ', case=False), 'Feature'] = 'River'
 
-    wq_summ2 = pd.merge(wq_summ1, wq_mtypes, on='MeasurementID').drop('MeasurementID', axis=1)
+        wq_summ2 = pd.merge(wq_summ1, wq_mtypes, on='MeasurementID').drop('MeasurementID', axis=1)
+
+        summ3 = pd.concat([summ2, wq_summ2], sort=True)
+    else:
+        summ3 = summ2
 
     ### Join
-    summ3 = pd.concat([summ2, wq_summ2], sort=True)
     summ3['FromDate'] = pd.to_datetime(summ3['FromDate'])
     summ3['ToDate'] = pd.to_datetime(summ3['ToDate'])
 
