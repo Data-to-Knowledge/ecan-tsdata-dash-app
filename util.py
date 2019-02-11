@@ -39,19 +39,19 @@ def ecan_ts_summ(server, database, features, mtypes, ctypes, data_codes, data_pr
 
     """
     ### Get the appropriate dataset/mtype keys
-    datasets1 = mssql.rd_sql(server, database, dataset_table, where_col={'Feature': features, 'MeasurementType': mtypes, 'CollectionType': ctypes, 'DataCode': data_codes, 'DataProvider': data_providers})
-    mtypes1 = mssql.rd_sql(server, database, mtype_table, ['MeasurementType', 'Units'], where_col={'MeasurementType': mtypes})
+    datasets1 = mssql.rd_sql(server, database, dataset_table, where_in={'Feature': features, 'MeasurementType': mtypes, 'CollectionType': ctypes, 'DataCode': data_codes, 'DataProvider': data_providers})
+    mtypes1 = mssql.rd_sql(server, database, mtype_table, ['MeasurementType', 'Units'], where_in={'MeasurementType': mtypes})
     datasets2 = pd.merge(datasets1, mtypes1, on='MeasurementType')
 
-    wq_mtypes = mssql.rd_sql(server, database, wq_mtypes_table, ['MeasurementID', 'Measurement'], where_col={'Measurement': mtypes})
+    wq_mtypes = mssql.rd_sql(server, database, wq_mtypes_table, ['MeasurementID', 'Measurement'], where_in={'Measurement': mtypes})
 
     ### Get the summary data
-    summ1 = mssql.rd_sql(server, database, ts_summ_table, ['ExtSiteID', 'DatasetTypeID', 'Min', 'Median', 'Mean', 'Max', 'Count', 'FromDate', 'ToDate'], where_col={'DatasetTypeID': datasets1.DatasetTypeID.tolist()})
+    summ1 = mssql.rd_sql(server, database, ts_summ_table, ['ExtSiteID', 'DatasetTypeID', 'Min', 'Median', 'Mean', 'Max', 'Count', 'FromDate', 'ToDate'], where_in={'DatasetTypeID': datasets1.DatasetTypeID.tolist()})
     summ2 = pd.merge(summ1, datasets2, on='DatasetTypeID')
 
     if not wq_mtypes.empty:
         wq_mtypes.rename(columns={'Measurement': 'MeasurementType'}, inplace=True)
-        wq_summ1 = mssql.rd_sql(server, database, wq_summ_table, ['ExtSiteID', 'MeasurementID', 'Units', 'FromDate', 'ToDate'], where_col={'MeasurementID': wq_mtypes.MeasurementID.tolist(), 'DataType': ['WQData']})
+        wq_summ1 = mssql.rd_sql(server, database, wq_summ_table, ['ExtSiteID', 'MeasurementID', 'Units', 'FromDate', 'ToDate'], where_in={'MeasurementID': wq_mtypes.MeasurementID.tolist(), 'DataType': ['WQData']})
         wq_summ1['CollectionType'] = 'Manual Field'
         wq_summ1['DataCode'] = 'Primary'
         wq_summ1['DataProvider'] = 'ECan'
@@ -141,7 +141,7 @@ def ecan_ts_data(server, database, site_ts_summ, from_date, to_date, dtl_method=
     sites1 = site_ts_summ.ExtSiteID.unique().tolist()
 
     if dataset1 < 10000:
-        ts1 = mssql.rd_sql(server, database, ts_table, ['ExtSiteID', 'DateTime', 'Value'], where_col={'DatasetTypeID': [dataset1], 'ExtSiteID': sites1}, from_date=from_date, to_date=to_date, date_col='DateTime')
+        ts1 = mssql.rd_sql(server, database, ts_table, ['ExtSiteID', 'DateTime', 'Value'], where_in={'DatasetTypeID': [dataset1], 'ExtSiteID': sites1}, from_date=from_date, to_date=to_date, date_col='DateTime')
     else:
         ts_list = []
         mtype = site_ts_summ.MeasurementType.iloc[0]
@@ -152,20 +152,3 @@ def ecan_ts_data(server, database, site_ts_summ, from_date, to_date, dtl_method=
         ts1.rename(columns={'Site': 'ExtSiteID'}, inplace=True)
 
     return ts1
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
