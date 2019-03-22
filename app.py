@@ -19,7 +19,7 @@ server = app.server
 ##########################################
 ### Parameters
 
-server = 'sql2012test01'
+server = 'edwprod01'
 db = 'hydro'
 sites_table = 'ExternalSite'
 ts_summ_table = 'TSDataNumericDailySumm'
@@ -380,4 +380,3 @@ def download_summ(summ_data):
 
 if __name__ == '__main__':
 	app.run_server(debug=True, host='0.0.0.0', port=8050)
-
