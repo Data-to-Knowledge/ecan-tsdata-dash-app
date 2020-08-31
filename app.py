@@ -19,7 +19,7 @@ server = app.server
 ##########################################
 ### Parameters
 
-server = 'edwprod01'
+server = 'edwtest01'
 db = 'hydro'
 sites_table = 'ExternalSite'
 ts_summ_table = 'TSDataNumericDailySumm'
